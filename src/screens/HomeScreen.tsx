@@ -11,7 +11,6 @@ export default function HomeScreen({ navigation }: Props) {
             <Text>🏠 Bienvenido a VoiceSummary</Text>
             <Button title="Grabar Audio" onPress={() => navigation.navigate('Record')} />
             <Button title="Configuración" onPress={() => navigation.navigate('Settings')} />
-            <Button title="Gestionar API Keys" onPress={() => navigation.navigate('ApiKeys')} />
         </View>
     );
 }
