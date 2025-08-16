@@ -2,16 +2,23 @@ import React, { useState, useContext } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { Audio } from 'expo-av';
 import NetInfo from '@react-native-community/netinfo';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
 import { transcribeAudio } from '@/services/transcriptionService';
 import { ApiKeyContext } from '@/providers/ApiKeyProvider';
 import { ThemeContext } from '@/providers/ThemeProvider';
+import { RootStackParamList } from '@/navigation/AppNavigator';
+
+type RecordScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
 export default function RecordScreen() {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [status, setStatus] = useState('');
   const [transcription, setTranscription] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
+
+  const navigation = useNavigation<RecordScreenNavigationProp>();
   const { activeKey } = useContext(ApiKeyContext);
   const { theme } = useContext(ThemeContext);
   const colors = theme === 'dark' ? darkColors : lightColors;
@@ -32,7 +39,7 @@ export default function RecordScreen() {
       await Audio.requestPermissionsAsync();
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
-        playsInSilentModeIOS: true
+        playsInSilentModeIOS: true,
       });
 
       const { recording } = await Audio.Recording.createAsync(
@@ -50,7 +57,7 @@ export default function RecordScreen() {
 
   const stopRecording = async () => {
     if (!recording) return;
-    
+
     try {
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
@@ -73,11 +80,28 @@ export default function RecordScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* 🔹 Botones de navegación */}
+      <View style={styles.navButtons}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('Home')}
+          style={[styles.navButton, { backgroundColor: colors.primary }]}
+        >
+          <Text style={styles.navButtonText}>Inicio</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => navigation.navigate('Settings')}
+          style={[styles.navButton, { backgroundColor: colors.primary }]}
+        >
+          <Text style={styles.navButtonText}>Configuracion</Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={[styles.card, { backgroundColor: colors.sectionBackground }]}>
         <Text style={[styles.status, { color: colors.text }]}>
           {status || 'Presiona el botón para comenzar a grabar'}
         </Text>
-        
+
         {isLoading ? (
           <ActivityIndicator size="large" color={colors.primary} />
         ) : transcription ? (
@@ -91,8 +115,7 @@ export default function RecordScreen() {
           <TouchableOpacity
             style={[
               styles.recordButton,
-              recording && { backgroundColor: colors.danger },
-              { backgroundColor: recording ? colors.danger : colors.primary }
+              { backgroundColor: recording ? colors.danger : colors.primary },
             ]}
             onPress={recording ? stopRecording : startRecording}
             disabled={isLoading}
@@ -112,6 +135,22 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     justifyContent: 'center',
+  },
+  navButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  navButton: {
+    flex: 1,
+    marginHorizontal: 5,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  navButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
   },
   card: {
     borderRadius: 12,
@@ -155,7 +194,7 @@ const styles = StyleSheet.create({
   },
 });
 
-// Esquemas de color consistentes con Settings
+// 🎨 Colores consistentes
 const lightColors = {
   background: '#f5f5f5',
   sectionBackground: '#ffffff',

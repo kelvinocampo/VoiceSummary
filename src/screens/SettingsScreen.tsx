@@ -2,12 +2,20 @@ import React, { useContext, useState } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Switch, Modal, Alert } from 'react-native';
 import { ThemeContext } from '@/providers/ThemeProvider';
 import { ApiKeyContext, ApiKey } from '@/providers/ApiKeyProvider';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '@/navigation/AppNavigator';
+
+type SettingsScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Settings'>;
 
 export default function SettingsScreen() {
   // Contextos
   const { theme, toggleTheme } = useContext(ThemeContext);
   const { keys, activeKey, addNewKey, editKey, removeKey, activateKey } = useContext(ApiKeyContext);
-  
+
+  // Navegación
+  const navigation = useNavigation<SettingsScreenNavigationProp>();
+
   // Estados
   const [language, setLanguage] = useState('es');
   const [newKeyName, setNewKeyName] = useState('');
@@ -56,6 +64,14 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Botón para volver a Home */}
+      <TouchableOpacity
+        style={[styles.backButton, { backgroundColor: colors.primary }]}
+        onPress={() => navigation.navigate('Home')}
+      >
+        <Text style={styles.buttonText}>⬅ Volver a Inicio</Text>
+      </TouchableOpacity>
+
       {/* Sección de Tema */}
       <View style={[styles.section, { backgroundColor: colors.sectionBackground }]}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Apariencia</Text>
@@ -222,6 +238,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
+  },
+  backButton: {
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+    marginBottom: 16,
   },
   section: {
     borderRadius: 12,
