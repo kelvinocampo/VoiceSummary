@@ -5,6 +5,7 @@ import { ApiKeyContext, ApiKey } from '@/providers/ApiKeyProvider';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/navigation/AppNavigator';
+import { Linking } from 'react-native';
 
 type SettingsScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Settings'>;
 
@@ -116,9 +117,44 @@ export default function SettingsScreen() {
       {/* Sección de API Keys */}
       <View style={[styles.section, { backgroundColor: colors.sectionBackground }]}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Gestión de API Keys</Text>
-        <Text style={[styles.activeKeyText, { color: colors.text }]}>
-          API Key activa: <Text style={{ color: colors.primary }}>{activeKey?.name || 'Ninguna'}</Text>
+
+        {/* Instrucciones */}
+        <Text style={[styles.instructions, { color: colors.secondaryText }]}>
+          Para usar Gemini necesitas una API Key de Google AI.
+          Puedes generar una en{" "}
+          <Text
+            style={{ color: colors.primary, textDecorationLine: "underline" }}
+            onPress={() => {
+              // abre en navegador
+              Linking.openURL("https://aistudio.google.com/app/apikey");
+            }}
+          >
+            aistudio.google.com/app/apikey
+          </Text>
         </Text>
+
+        {/* Key activa */}
+        <View style={styles.activeKeyContainer}>
+          <Text style={[styles.activeKeyLabel, { color: colors.text }]}>
+            API Key activa:
+          </Text>
+          {activeKey ? (
+            <View style={styles.activeKeyBox}>
+              <Text style={[styles.keyName, { color: colors.primary }]}>
+                {activeKey.name}
+              </Text>
+              <Text
+                style={[styles.keyValue, { color: colors.text }]}
+                numberOfLines={1}
+                ellipsizeMode="middle"
+              >
+                {activeKey.key}
+              </Text>
+            </View>
+          ) : (
+            <Text style={{ color: colors.secondaryText }}>Ninguna</Text>
+          )}
+        </View>
 
         {/* Formulario para agregar nueva key */}
         <View style={styles.addKeyContainer}>
@@ -127,32 +163,60 @@ export default function SettingsScreen() {
             placeholderTextColor={colors.placeholder}
             value={newKeyName}
             onChangeText={setNewKeyName}
-            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.inputBackground,
+                color: colors.text,
+                borderColor: colors.border,
+              },
+            ]}
           />
           <TextInput
             placeholder="Valor de la API Key"
             placeholderTextColor={colors.placeholder}
             value={newKeyValue}
             onChangeText={setNewKeyValue}
-            style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text, borderColor: colors.border }]}
+            secureTextEntry
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.inputBackground,
+                color: colors.text,
+                borderColor: colors.border,
+              },
+            ]}
           />
           <TouchableOpacity
             style={[styles.addButton, { backgroundColor: colors.primary }]}
             onPress={handleAddKey}
           >
-            <Text style={styles.buttonText}>Agregar API Key</Text>
+            <Text style={styles.buttonText}>➕ Agregar API Key</Text>
           </TouchableOpacity>
         </View>
 
         {/* Lista de API Keys */}
         <View style={styles.keysList}>
           {keys.map((key) => (
-            <View key={key.id} style={[styles.keyItem, { backgroundColor: colors.itemBackground, borderColor: colors.border }]}>
+            <View
+              key={key.id}
+              style={[
+                styles.keyItem,
+                { backgroundColor: colors.itemBackground, borderColor: colors.border },
+              ]}
+            >
               <View style={styles.keyInfo}>
                 <Text style={[styles.keyName, { color: colors.text }]}>
-                  {key.name} {key.active && <Text style={{ color: colors.primary }}>(Activa)</Text>}
+                  {key.name}{" "}
+                  {key.active && (
+                    <Text style={{ color: colors.primary }}>(Activa)</Text>
+                  )}
                 </Text>
-                <Text style={[styles.keyValue, { color: colors.secondaryText }]} numberOfLines={1} ellipsizeMode="middle">
+                <Text
+                  style={[styles.keyValue, { color: colors.secondaryText }]}
+                  numberOfLines={1}
+                  ellipsizeMode="middle"
+                >
                   {key.key}
                 </Text>
               </View>
@@ -187,6 +251,7 @@ export default function SettingsScreen() {
           ))}
         </View>
       </View>
+
 
       {/* Modal para editar API Key */}
       <Modal
@@ -244,6 +309,24 @@ const styles = StyleSheet.create({
     padding: 12,
     alignItems: 'center',
     marginBottom: 16,
+  },
+  instructions: {
+    fontSize: 14,
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  activeKeyContainer: {
+    marginBottom: 16,
+  },
+  activeKeyLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 6,
+  },
+  activeKeyBox: {
+    padding: 12,
+    borderWidth: 1,
+    borderRadius: 8,
   },
   section: {
     borderRadius: 12,

@@ -1,12 +1,19 @@
 // src/providers/ApiKeyProvider.tsx
-import React, { createContext, useState, useEffect, ReactNode } from 'react';
-import { getAllKeys, addKey, updateKey, deleteKey, setActiveKey, getActiveKey } from '@/services/apiKeyDatabase';
+import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import {
+  getAllKeys,
+  addKey,
+  updateKey,
+  deleteKey,
+  setActiveKey as dbSetActiveKey,
+  getActiveKey,
+} from '@/services/apiKeyDatabase';
 
 export interface ApiKey {
   id: number;
   name: string;
   key: string;
-  active: boolean;
+  active: number;
 }
 
 interface ApiKeyContextType {
@@ -22,41 +29,64 @@ export const ApiKeyContext = createContext<ApiKeyContextType>({} as ApiKeyContex
 
 export const ApiKeyProvider = ({ children }: { children: ReactNode }) => {
   const [keys, setKeys] = useState<ApiKey[]>([]);
-  const [activeKey, setActive] = useState<ApiKey | null>(null);
+  const [activeKey, setActiveKeyState] = useState<ApiKey | null>(null);
+
+  // Cargar keys desde DB
+  const loadKeys = useCallback(async () => {
+    try {
+      const allKeys = await getAllKeys();
+      const active = await getActiveKey();
+      setKeys(allKeys || []);
+      setActiveKeyState(active || null);
+    } catch (error) {
+      console.error('Error al cargar API Keys:', error);
+    }
+  }, []);
 
   useEffect(() => {
     loadKeys();
-  }, []);
-
-  const loadKeys = async () => {
-    const allKeys = await getAllKeys();
-    const active = await getActiveKey();
-    setKeys(allKeys);
-    setActive(active);
-  };
+  }, [loadKeys]);
 
   const addNewKey = async (name: string, key: string) => {
-    await addKey(name, key);
-    await loadKeys();
+    try {
+      await addKey(name, key);
+      await loadKeys();
+    } catch (error) {
+      console.error('Error al agregar API Key:', error);
+    }
   };
 
   const editKey = async (id: number, name: string, key: string) => {
-    await updateKey(id, name, key);
-    await loadKeys();
+    try {
+      await updateKey(id, name, key);
+      await loadKeys();
+    } catch (error) {
+      console.error('Error al editar API Key:', error);
+    }
   };
 
   const removeKey = async (id: number) => {
-    await deleteKey(id);
-    await loadKeys();
+    try {
+      await deleteKey(id);
+      await loadKeys();
+    } catch (error) {
+      console.error('Error al eliminar API Key:', error);
+    }
   };
 
   const activateKey = async (id: number) => {
-    await setActiveKey(id);
-    await loadKeys();
+    try {
+      await dbSetActiveKey(id);
+      await loadKeys();
+    } catch (error) {
+      console.error('Error al activar API Key:', error);
+    }
   };
 
   return (
-    <ApiKeyContext.Provider value={{ keys, activeKey, addNewKey, editKey, removeKey, activateKey }}>
+    <ApiKeyContext.Provider
+      value={{ keys, activeKey, addNewKey, editKey, removeKey, activateKey }}
+    >
       {children}
     </ApiKeyContext.Provider>
   );

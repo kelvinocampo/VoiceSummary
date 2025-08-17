@@ -1,31 +1,38 @@
+import * as FileSystem from "expo-file-system";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
 export const transcribeAudio = async (uri: string, apiKey: string) => {
   try {
-    const formData = new FormData();
-    formData.append('file', {
-      uri,
-      name: 'audio.m4a',
-      type: 'audio/m4a',
-    } as any);
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    formData.append('model', 'whisper-1');
-
-    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'multipart/form-data',
-      },
-      body: formData,
+    // Leer el archivo con expo-file-system
+    const base64Audio = await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
     });
 
-    if (!response.ok) {
-      throw new Error(`Error en la API: ${response.status}`);
-    }
+    const result = await model.generateContent({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              inlineData: {
+                mimeType: "audio/m4a",
+                data: base64Audio,
+              },
+            },
+            {
+              text: "Transcribe this audio into Spanish text.",
+            },
+          ],
+        },
+      ],
+    });
 
-    const data = await response.json();
-    return data.text;
+    return result.response.text();
   } catch (error) {
-    console.error('Error transcribiendo audio:', error);
+    console.error("Error transcribiendo con Gemini:", error);
     throw error;
   }
 };
