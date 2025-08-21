@@ -6,6 +6,11 @@ import { transcribeAudio } from '@/services/transcriptionService';
 import { summarizeText } from '@/services/summarizeText';
 import { ApiKeyContext } from '@/providers/ApiKeyProvider';
 import { ThemeContext } from '@/providers/ThemeProvider';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '@/navigation/AppNavigator';
+
+type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Home'>
 
 const MAX_RECORDING_TIME = 70 * 1000; // 1 min 10 seg
 let warningTimeout: NodeJS.Timeout;
@@ -18,6 +23,7 @@ export default function RecordScreen() {
   const [summary, setSummary] = useState('');
   const [keyPoints, setKeyPoints] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const navigation = useNavigation<HomeScreenNavigationProp>();
 
   const { activeKey } = useContext(ApiKeyContext);
   const { theme } = useContext(ThemeContext);
@@ -101,6 +107,12 @@ export default function RecordScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <TouchableOpacity
+        style={[styles.fab, { backgroundColor: colors.primary }]}
+        onPress={() => navigation.navigate('Settings')}
+      >
+        <Text style={styles.fabText}>⚙️</Text>
+      </TouchableOpacity>
       <View style={[styles.card, { backgroundColor: colors.sectionBackground }]}>
         <Text style={[styles.status, { color: colors.text }]}>
           {status || 'Presiona el botón para comenzar a grabar'}
@@ -161,6 +173,21 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     justifyContent: 'center',
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+  },
+  fabText: {
+    fontSize: 22,
+    color: 'white',
   },
   card: {
     borderRadius: 12,
