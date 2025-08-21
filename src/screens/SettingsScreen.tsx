@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect } from 'react';
+import React, { useContext, useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,6 @@ import {
   SafeAreaView,
   StatusBar,
   ActivityIndicator,
-  Animated,
 } from 'react-native';
 import { ThemeContext } from '@/providers/ThemeProvider';
 import { ApiKeyContext, ApiKey } from '@/providers/ApiKeyProvider';
@@ -26,12 +25,21 @@ type SettingsScreenNavigationProp = NativeStackNavigationProp<RootStackParamList
 export default function SettingsScreen() {
   // Contextos
   const { theme, toggleTheme } = useContext(ThemeContext);
-  const { keys, activeKey, addNewKey, editKey, removeKey, activateKey } = useContext(ApiKeyContext);
+  const { 
+    keys, 
+    activeKey, 
+    isLoading, 
+    addNewKey, 
+    editKey, 
+    removeKey, 
+    activateKey,
+    refreshKeys 
+  } = useContext(ApiKeyContext);
 
   // Navegación
   const navigation = useNavigation<SettingsScreenNavigationProp>();
 
-  // Estados
+  // Estados locales - EVITAR re-renders innecesarios
   const [language, setLanguage] = useState('es');
   const [newKeyName, setNewKeyName] = useState('');
   const [newKeyValue, setNewKeyValue] = useState('');
@@ -39,30 +47,30 @@ export default function SettingsScreen() {
   const [editKeyName, setEditKeyName] = useState('');
   const [editKeyValue, setEditKeyValue] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [processingAction, setProcessingAction] = useState(false);
   const [showKeyValues, setShowKeyValues] = useState<{[key: number]: boolean}>({});
 
-  // Colores basados en el tema
-  const colors = theme === 'dark' ? darkColors : lightColors;
+  // Memoizar colores para evitar recálculos
+  const colors = useMemo(() => theme === 'dark' ? darkColors : lightColors, [theme]);
 
-  // Animación para las cards
-  const fadeAnim = new Animated.Value(0);
-
-  useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-  }, []);
-
-  // Log para debugging
+  // Refrescar keys cuando la pantalla toma foco
   useFocusEffect(
     React.useCallback(() => {
-      console.log('Keys en SettingsScreen:', keys);
-      console.log('Active key:', activeKey);
-    }, [keys, activeKey])
+      console.log('SettingsScreen focused, refreshing keys...');
+      refreshKeys();
+    }, [refreshKeys])
   );
+
+  // Log para debugging - solo en desarrollo
+  useEffect(() => {
+    if (__DEV__) {
+      console.log('Settings screen state:', {
+        keysCount: keys.length,
+        activeKey: activeKey?.name || 'none',
+        isLoading
+      });
+    }
+  }, [keys, activeKey, isLoading]);
 
   // Alternar visibilidad de API key
   const toggleKeyVisibility = (keyId: number) => {
@@ -83,23 +91,21 @@ export default function SettingsScreen() {
       return;
     }
     
-    // Verificar si ya existe una key con ese nombre
     if (keys.some(key => key.name.toLowerCase() === newKeyName.trim().toLowerCase())) {
       Alert.alert('Error', 'Ya existe una API Key con ese nombre');
       return;
     }
 
-    setIsLoading(true);
+    setProcessingAction(true);
     try {
       await addNewKey(newKeyName.trim(), newKeyValue.trim());
       setNewKeyName('');
       setNewKeyValue('');
       Alert.alert('Éxito', 'API Key agregada correctamente');
-    } catch (error) {
-      console.error('Error agregando key:', error);
-      Alert.alert('Error', 'No se pudo agregar la API Key');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'No se pudo agregar la API Key');
     } finally {
-      setIsLoading(false);
+      setProcessingAction(false);
     }
   };
 
@@ -110,7 +116,7 @@ export default function SettingsScreen() {
       return;
     }
 
-    setIsLoading(true);
+    setProcessingAction(true);
     try {
       await editKey(editingKey.id, editKeyName.trim(), editKeyValue.trim());
       setEditingKey(null);
@@ -118,11 +124,10 @@ export default function SettingsScreen() {
       setEditKeyName('');
       setEditKeyValue('');
       Alert.alert('Éxito', 'API Key actualizada correctamente');
-    } catch (error) {
-      console.error('Error editando key:', error);
-      Alert.alert('Error', 'No se pudo actualizar la API Key');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'No se pudo actualizar la API Key');
     } finally {
-      setIsLoading(false);
+      setProcessingAction(false);
     }
   };
 
@@ -136,9 +141,16 @@ export default function SettingsScreen() {
         {
           text: 'Eliminar',
           style: 'destructive',
-          onPress: () => {
-            removeKey(id);
-            Alert.alert('Éxito', 'API Key eliminada correctamente');
+          onPress: async () => {
+            setProcessingAction(true);
+            try {
+              await removeKey(id);
+              Alert.alert('Éxito', 'API Key eliminada correctamente');
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'No se pudo eliminar la API Key');
+            } finally {
+              setProcessingAction(false);
+            }
           }
         },
       ]
@@ -147,20 +159,30 @@ export default function SettingsScreen() {
 
   // Manejar activación de key
   const handleActivateKey = async (id: number, name: string) => {
+    setProcessingAction(true);
     try {
       await activateKey(id);
       Alert.alert('Éxito', `API Key "${name}" activada correctamente`);
-    } catch (error) {
-      console.error('Error activando key:', error);
-      Alert.alert('Error', 'No se pudo activar la API Key');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'No se pudo activar la API Key');
+    } finally {
+      setProcessingAction(false);
     }
   };
 
   // Abrir enlace externo
   const openGoogleAIStudio = () => {
     Linking.openURL('https://aistudio.google.com/app/apikey').catch((err) =>
-      console.error('Error abriendo enlace:', err)
+      Alert.alert('Error', 'No se pudo abrir el enlace')
     );
+  };
+
+  // Cerrar modal
+  const closeModal = () => {
+    setModalVisible(false);
+    setEditingKey(null);
+    setEditKeyName('');
+    setEditKeyValue('');
   };
 
   return (
@@ -168,15 +190,16 @@ export default function SettingsScreen() {
       <StatusBar
         barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
         backgroundColor={colors.background}
+        translucent={false}
       />
 
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Header fijo */}
+      <View style={[styles.header, { backgroundColor: colors.background }]}>
         <TouchableOpacity
           style={[styles.backButton, { backgroundColor: colors.primary }]}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backButtonText}>← Volver</Text>
+          <Text style={[styles.backButtonText, { color: colors.white }]}>← Volver</Text>
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>
           Configuración
@@ -184,280 +207,234 @@ export default function SettingsScreen() {
         <View style={styles.placeholder} />
       </View>
 
-      <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-        <ScrollView 
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          {/* Sección de Tema */}
-          <View style={[styles.section, { backgroundColor: colors.cardBackground }]}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionIcon, { color: colors.primary }]}>🎨</Text>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Apariencia</Text>
+      {/* Loading overlay */}
+      {(isLoading || processingAction) && (
+        <View style={styles.loadingOverlay}>
+          <View style={[styles.loadingContainer, { backgroundColor: colors.cardBackground }]}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.loadingText, { color: colors.text }]}>
+              {isLoading ? 'Cargando...' : 'Procesando...'}
+            </Text>
+          </View>
+        </View>
+      )}
+
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Sección de Tema */}
+        <View style={[styles.section, { backgroundColor: colors.cardBackground }]}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionIcon, { color: colors.primary }]}>🎨</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Apariencia</Text>
+          </View>
+          <View style={[styles.settingRow, { backgroundColor: colors.itemBackground }]}>
+            <View style={styles.settingInfo}>
+              <Text style={[styles.settingText, { color: colors.text }]}>Tema oscuro</Text>
+              <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
+                Cambia entre tema claro y oscuro
+              </Text>
             </View>
-            <View style={[styles.settingRow, { backgroundColor: colors.itemBackground }]}>
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingText, { color: colors.text }]}>Tema oscuro</Text>
-                <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>
-                  Cambia entre tema claro y oscuro
-                </Text>
-              </View>
-              <Switch
-                value={theme === 'dark'}
-                onValueChange={toggleTheme}
-                thumbColor={theme === 'dark' ? colors.primary : '#ffffff'}
-                trackColor={{ false: colors.border, true: colors.primary + '80' }}
-              />
-            </View>
+            <Switch
+              value={theme === 'dark'}
+              onValueChange={toggleTheme}
+              thumbColor={colors.white}
+              trackColor={{ false: colors.border, true: colors.primary + '80' }}
+            />
+          </View>
+        </View>
+
+        {/* Sección de API Keys */}
+        <View style={[styles.section, { backgroundColor: colors.cardBackground }]}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionIcon, { color: colors.primary }]}>🔑</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>API Keys</Text>
           </View>
 
-          {/* Sección de Idioma */}
-          <View style={[styles.section, { backgroundColor: colors.cardBackground }]}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionIcon, { color: colors.primary }]}>🌐</Text>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Idioma</Text>
-            </View>
-            <View style={styles.languageContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.languageButton,
-                  language === 'es' && { backgroundColor: colors.primary },
-                  { borderColor: colors.border }
-                ]}
-                onPress={() => setLanguage('es')}
-              >
-                <Text style={[
-                  styles.languageText,
-                  { color: language === 'es' ? colors.white : colors.text }
-                ]}>
-                  🇪🇸 Español
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.languageButton,
-                  language === 'en' && { backgroundColor: colors.primary },
-                  { borderColor: colors.border }
-                ]}
-                onPress={() => setLanguage('en')}
-              >
-                <Text style={[
-                  styles.languageText,
-                  { color: language === 'en' ? colors.white : colors.text }
-                ]}>
-                  🇺🇸 English
-                </Text>
-              </TouchableOpacity>
-            </View>
+          {/* Instrucciones */}
+          <View style={[styles.instructionsContainer, { backgroundColor: colors.infoBackground }]}>
+            <Text style={[styles.instructionsTitle, { color: colors.primary }]}>
+              ℹ️ ¿Cómo obtener una API Key?
+            </Text>
+            <Text style={[styles.instructionsText, { color: colors.textSecondary }]}>
+              Para usar Gemini necesitas una API Key gratuita de Google AI Studio.
+            </Text>
+            <TouchableOpacity
+              style={[styles.linkButton, { backgroundColor: colors.primary }]}
+              onPress={openGoogleAIStudio}
+            >
+              <Text style={[styles.linkButtonText, { color: colors.white }]}>
+                🚀 Obtener API Key gratis
+              </Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Sección de API Keys */}
-          <View style={[styles.section, { backgroundColor: colors.cardBackground }]}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionIcon, { color: colors.primary }]}>🔑</Text>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>API Keys</Text>
-            </View>
-
-            {/* Instrucciones */}
-            <View style={[styles.instructionsContainer, { backgroundColor: colors.infoBackground }]}>
-              <Text style={[styles.instructionsTitle, { color: colors.primary }]}>
-                ℹ️ ¿Cómo obtener una API Key?
+          {/* API Key activa */}
+          {activeKey && (
+            <View style={[styles.activeKeyContainer, { backgroundColor: colors.successBackground }]}>
+              <Text style={[styles.activeKeyLabel, { color: colors.success }]}>
+                ✅ API Key Activa
               </Text>
-              <Text style={[styles.instructionsText, { color: colors.textSecondary }]}>
-                Para usar Gemini necesitas una API Key gratuita de Google AI Studio.
-              </Text>
-              <TouchableOpacity
-                style={[styles.linkButton, { backgroundColor: colors.primary }]}
-                onPress={openGoogleAIStudio}
-              >
-                <Text style={[styles.linkButtonText, { color: colors.white }]}>
-                  🚀 Obtener API Key gratis
+              <View style={styles.activeKeyInfo}>
+                <Text style={[styles.activeKeyName, { color: colors.text }]}>
+                  {activeKey.name}
                 </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* API Key activa */}
-            {activeKey && (
-              <View style={[styles.activeKeyContainer, { backgroundColor: colors.successBackground }]}>
-                <Text style={[styles.activeKeyLabel, { color: colors.success }]}>
-                  ✅ API Key Activa
+                <Text style={[styles.activeKeyValue, { color: colors.textSecondary }]}>
+                  {activeKey.key.substring(0, 8)}••••••••{activeKey.key.slice(-4)}
                 </Text>
-                <View style={styles.activeKeyInfo}>
-                  <Text style={[styles.activeKeyName, { color: colors.text }]}>
-                    {activeKey.name}
-                  </Text>
-                  <Text style={[styles.activeKeyValue, { color: colors.textSecondary }]}>
-                    {activeKey.key.substring(0, 8)}••••••••{activeKey.key.slice(-4)}
-                  </Text>
-                </View>
               </View>
-            )}
-
-            {/* Formulario para agregar nueva key */}
-            <View style={styles.addKeyForm}>
-              <Text style={[styles.formTitle, { color: colors.text }]}>
-                Agregar nueva API Key
-              </Text>
-              <TextInput
-                placeholder="Nombre descriptivo (ej: Mi API Key)"
-                placeholderTextColor={colors.placeholder}
-                value={newKeyName}
-                onChangeText={setNewKeyName}
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: colors.inputBackground,
-                    color: colors.text,
-                    borderColor: colors.border,
-                  },
-                ]}
-                maxLength={50}
-              />
-              <TextInput
-                placeholder="Pega tu API Key aquí"
-                placeholderTextColor={colors.placeholder}
-                value={newKeyValue}
-                onChangeText={setNewKeyValue}
-                secureTextEntry={!showKeyValues[-1]}
-                multiline={false}
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: colors.inputBackground,
-                    color: colors.text,
-                    borderColor: colors.border,
-                  },
-                ]}
-              />
-              <TouchableOpacity
-                style={[
-                  styles.addButton,
-                  { 
-                    backgroundColor: colors.primary,
-                    opacity: isLoading ? 0.6 : 1
-                  }
-                ]}
-                onPress={handleAddKey}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <ActivityIndicator color={colors.white} size="small" />
-                ) : (
-                  <Text style={[styles.addButtonText, { color: colors.white }]}>
-                    ➕ Agregar API Key
-                  </Text>
-                )}
-              </TouchableOpacity>
             </View>
+          )}
 
-            {/* Lista de API Keys */}
-            <View style={styles.keysListContainer}>
-              <Text style={[styles.keysListTitle, { color: colors.text }]}>
-                Mis API Keys ({keys.length})
+          {/* Formulario para agregar nueva key */}
+          <View style={styles.addKeyForm}>
+            <Text style={[styles.formTitle, { color: colors.text }]}>
+              Agregar nueva API Key
+            </Text>
+            <TextInput
+              placeholder="Nombre descriptivo (ej: Mi API Key)"
+              placeholderTextColor={colors.placeholder}
+              value={newKeyName}
+              onChangeText={setNewKeyName}
+              style={[styles.input, {
+                backgroundColor: colors.inputBackground,
+                color: colors.text,
+                borderColor: colors.border,
+              }]}
+              maxLength={50}
+              editable={!processingAction}
+            />
+            <TextInput
+              placeholder="Pega tu API Key aquí"
+              placeholderTextColor={colors.placeholder}
+              value={newKeyValue}
+              onChangeText={setNewKeyValue}
+              secureTextEntry={true}
+              style={[styles.input, {
+                backgroundColor: colors.inputBackground,
+                color: colors.text,
+                borderColor: colors.border,
+              }]}
+              editable={!processingAction}
+            />
+            <TouchableOpacity
+              style={[styles.addButton, { 
+                backgroundColor: colors.primary,
+                opacity: processingAction ? 0.6 : 1
+              }]}
+              onPress={handleAddKey}
+              disabled={processingAction}
+            >
+              <Text style={[styles.addButtonText, { color: colors.white }]}>
+                ➕ Agregar API Key
               </Text>
-              
-              {keys.length === 0 ? (
-                <View style={[styles.emptyState, { backgroundColor: colors.itemBackground }]}>
-                  <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
-                    🔒 No tienes API Keys configuradas
-                  </Text>
-                  <Text style={[styles.emptyStateSubtext, { color: colors.textSecondary }]}>
-                    Agrega tu primera API Key para comenzar
-                  </Text>
-                </View>
-              ) : (
-                keys.map((key) => (
-                  <View
-                    key={key.id}
-                    style={[
-                      styles.keyItem,
-                      {
-                        backgroundColor: key.active ? colors.successBackground : colors.itemBackground,
-                        borderColor: key.active ? colors.success : colors.border,
-                      },
-                    ]}
-                  >
-                    <View style={styles.keyHeader}>
-                      <View style={styles.keyInfo}>
-                        <View style={styles.keyNameContainer}>
-                          <Text style={[styles.keyName, { color: colors.text }]}>
-                            {key.name}
+            </TouchableOpacity>
+          </View>
+
+          {/* Lista de API Keys */}
+          <View style={styles.keysListContainer}>
+            <Text style={[styles.keysListTitle, { color: colors.text }]}>
+              Mis API Keys ({keys.length})
+            </Text>
+            
+            {keys.length === 0 ? (
+              <View style={[styles.emptyState, { backgroundColor: colors.itemBackground }]}>
+                <Text style={[styles.emptyStateText, { color: colors.textSecondary }]}>
+                  🔒 No tienes API Keys configuradas
+                </Text>
+                <Text style={[styles.emptyStateSubtext, { color: colors.textSecondary }]}>
+                  Agrega tu primera API Key para comenzar
+                </Text>
+              </View>
+            ) : (
+              keys.map((key) => (
+                <View
+                  key={key.id}
+                  style={[styles.keyItem, {
+                    backgroundColor: key.active ? colors.successBackground : colors.itemBackground,
+                    borderColor: key.active ? colors.success : colors.border,
+                  }]}
+                >
+                  <View style={styles.keyInfo}>
+                    <View style={styles.keyNameContainer}>
+                      <Text style={[styles.keyName, { color: colors.text }]}>
+                        {key.name}
+                      </Text>
+                      {key.active && (
+                        <View style={[styles.activeBadge, { backgroundColor: colors.success }]}>
+                          <Text style={[styles.activeBadgeText, { color: colors.white }]}>
+                            ACTIVA
                           </Text>
-                          {key.active && (
-                            <View style={[styles.activeBadge, { backgroundColor: colors.success }]}>
-                              <Text style={[styles.activeBadgeText, { color: colors.white }]}>
-                                ACTIVA
-                              </Text>
-                            </View>
-                          )}
                         </View>
-                        <TouchableOpacity
-                          onPress={() => toggleKeyVisibility(key.id)}
-                          style={styles.keyValueContainer}
-                        >
-                          <Text
-                            style={[styles.keyValue, { color: colors.textSecondary }]}
-                            numberOfLines={1}
-                          >
-                            {showKeyValues[key.id] 
-                              ? key.key 
-                              : `${key.key.substring(0, 8)}••••••••${key.key.slice(-4)}`
-                            }
-                          </Text>
-                          <Text style={[styles.toggleText, { color: colors.primary }]}>
-                            {showKeyValues[key.id] ? '🙈' : '👁️'}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                    
-                    <View style={styles.keyActions}>
-                      {!key.active && (
-                        <TouchableOpacity
-                          style={[styles.actionButton, { backgroundColor: colors.primary }]}
-                          onPress={() => handleActivateKey(key.id, key.name)}
-                        >
-                          <Text style={[styles.actionButtonText, { color: colors.white }]}>
-                            ✅ Activar
-                          </Text>
-                        </TouchableOpacity>
                       )}
-                      <TouchableOpacity
-                        style={[styles.actionButton, { backgroundColor: colors.secondary }]}
-                        onPress={() => {
-                          setEditingKey(key);
-                          setEditKeyName(key.name);
-                          setEditKeyValue(key.key);
-                          setModalVisible(true);
-                        }}
-                      >
-                        <Text style={[styles.actionButtonText, { color: colors.white }]}>
-                          ✏️ Editar
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.actionButton, { backgroundColor: colors.danger }]}
-                        onPress={() => handleDeleteKey(key.id, key.name)}
-                      >
-                        <Text style={[styles.actionButtonText, { color: colors.white }]}>
-                          🗑️ Eliminar
-                        </Text>
-                      </TouchableOpacity>
                     </View>
+                    <TouchableOpacity
+                      onPress={() => toggleKeyVisibility(key.id)}
+                      style={styles.keyValueContainer}
+                    >
+                      <Text style={[styles.keyValue, { color: colors.textSecondary }]}>
+                        {showKeyValues[key.id] 
+                          ? key.key 
+                          : `${key.key.substring(0, 8)}••••••••${key.key.slice(-4)}`
+                        }
+                      </Text>
+                      <Text style={[styles.toggleText, { color: colors.primary }]}>
+                        {showKeyValues[key.id] ? '🙈' : '👁️'}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
-                ))
-              )}
-            </View>
+                  
+                  <View style={styles.keyActions}>
+                    {!key.active && (
+                      <TouchableOpacity
+                        style={[styles.actionButton, { backgroundColor: colors.primary }]}
+                        onPress={() => handleActivateKey(key.id, key.name)}
+                        disabled={processingAction}
+                      >
+                        <Text style={[styles.actionButtonText, { color: colors.white }]}>
+                          ✅ Activar
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      style={[styles.actionButton, { backgroundColor: colors.secondary }]}
+                      onPress={() => {
+                        setEditingKey(key);
+                        setEditKeyName(key.name);
+                        setEditKeyValue(key.key);
+                        setModalVisible(true);
+                      }}
+                      disabled={processingAction}
+                    >
+                      <Text style={[styles.actionButtonText, { color: colors.white }]}>
+                        ✏️ Editar
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.actionButton, { backgroundColor: colors.danger }]}
+                      onPress={() => handleDeleteKey(key.id, key.name)}
+                      disabled={processingAction}
+                    >
+                      <Text style={[styles.actionButtonText, { color: colors.white }]}>
+                        🗑️ Eliminar
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))
+            )}
           </View>
-        </ScrollView>
-      </Animated.View>
+        </View>
+      </ScrollView>
 
       {/* Modal para editar API Key */}
       <Modal
         animationType="slide"
         transparent={true}
         visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={closeModal}
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: colors.cardBackground }]}>
@@ -469,62 +446,46 @@ export default function SettingsScreen() {
               placeholderTextColor={colors.placeholder}
               value={editKeyName}
               onChangeText={setEditKeyName}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors.inputBackground,
-                  color: colors.text,
-                  borderColor: colors.border
-                }
-              ]}
+              style={[styles.input, {
+                backgroundColor: colors.inputBackground,
+                color: colors.text,
+                borderColor: colors.border
+              }]}
+              editable={!processingAction}
             />
             <TextInput
               placeholder="API Key"
               placeholderTextColor={colors.placeholder}
               value={editKeyValue}
               onChangeText={setEditKeyValue}
-              multiline={false}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors.inputBackground,
-                  color: colors.text,
-                  borderColor: colors.border
-                }
-              ]}
+              style={[styles.input, {
+                backgroundColor: colors.inputBackground,
+                color: colors.text,
+                borderColor: colors.border
+              }]}
+              editable={!processingAction}
             />
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={[styles.modalButton, { backgroundColor: colors.textSecondary }]}
-                onPress={() => {
-                  setModalVisible(false);
-                  setEditingKey(null);
-                  setEditKeyName('');
-                  setEditKeyValue('');
-                }}
+                onPress={closeModal}
+                disabled={processingAction}
               >
                 <Text style={[styles.modalButtonText, { color: colors.white }]}>
                   Cancelar
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[
-                  styles.modalButton,
-                  { 
-                    backgroundColor: colors.primary,
-                    opacity: isLoading ? 0.6 : 1
-                  }
-                ]}
+                style={[styles.modalButton, { 
+                  backgroundColor: colors.primary,
+                  opacity: processingAction ? 0.6 : 1
+                }]}
                 onPress={handleEditKey}
-                disabled={isLoading}
+                disabled={processingAction}
               >
-                {isLoading ? (
-                  <ActivityIndicator color={colors.white} size="small" />
-                ) : (
-                  <Text style={[styles.modalButtonText, { color: colors.white }]}>
-                    Guardar
-                  </Text>
-                )}
+                <Text style={[styles.modalButtonText, { color: colors.white }]}>
+                  Guardar
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -534,7 +495,7 @@ export default function SettingsScreen() {
   );
 }
 
-// Estilos mejorados
+// Estilos optimizados
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -545,6 +506,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
   backButton: {
     paddingHorizontal: 16,
@@ -552,7 +518,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   backButtonText: {
-    color: 'white',
     fontWeight: '600',
     fontSize: 14,
   },
@@ -563,7 +528,7 @@ const styles = StyleSheet.create({
   placeholder: {
     width: 60,
   },
-  content: {
+  scrollView: {
     flex: 1,
   },
   scrollContent: {
@@ -610,22 +575,6 @@ const styles = StyleSheet.create({
   settingDescription: {
     fontSize: 14,
     marginTop: 4,
-  },
-  languageContainer: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  languageButton: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 2,
-    alignItems: 'center',
-  },
-  languageText: {
-    fontSize: 14,
-    fontWeight: '600',
   },
   instructionsContainer: {
     padding: 16,
@@ -683,7 +632,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   input: {
-    borderWidth: 2,
+    borderWidth: 1,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -727,11 +676,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 2,
   },
-  keyHeader: {
-    marginBottom: 12,
-  },
   keyInfo: {
-    flex: 1,
+    marginBottom: 12,
   },
   keyNameContainer: {
     flexDirection: 'row',
@@ -782,6 +728,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  loadingContainer: {
+    padding: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    minWidth: 120,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    fontWeight: '600',
+  },
   modalOverlay: {
     flex: 1,
     justifyContent: 'center',
@@ -818,7 +786,7 @@ const styles = StyleSheet.create({
   },
 });
 
-// Esquemas de color mejorados
+// Esquemas de color optimizados
 const lightColors = {
   background: '#f8f9fa',
   cardBackground: '#ffffff',
